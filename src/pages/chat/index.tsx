@@ -3,6 +3,7 @@ import { Box, Paper, Typography, List, ListItem, ListItemText,TextField,Button,}
 import Brightness1RoundedIcon from '@mui/icons-material/Brightness1Rounded';
 import { useNavigate } from "react-router-dom";
 import { useChat } from "../../context/ChatContext"
+import TypingIndicator from "../../components/dot";
 
 export function Chat() {
   const username = localStorage.getItem("username")
@@ -10,7 +11,8 @@ export function Chat() {
   const navigate = useNavigate();
 
   // Hook que gerencia a conexão com o SignalR
-  const { messages, connectedUsers, sendMessage, leaveChat, isConnected } = useChat();
+  const { messages, connectedUsers, sendMessage, leaveChat, isConnected, sendStartTyping,
+    sendStopTyping, isTyping, typingTimeoutRef } = useChat();
 
   const [input, setInput] = useState("");
 
@@ -19,7 +21,10 @@ export function Chat() {
     
     if (!input.trim()) return;
 
-      await sendMessage(input).then(() => setInput(""))
+      await sendMessage(input).then(() => {
+        setInput("");
+        sendStopTyping(username!, roomname!);
+      })
         .catch((error) => console.log("Erro ao enviar mensagem:", error));
   };
 
@@ -28,6 +33,7 @@ export function Chat() {
     await leaveChat();
     navigate("/");
   };
+
 
   // Se não estiver conectado, retorna mensagem de carregamento
   if (!isConnected) {
@@ -71,8 +77,8 @@ export function Chat() {
         </List>
       </Box>
 
-      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", p: 2 }}>
-        <Paper sx={{ flexGrow: 1, p: 2, overflowY: "auto", mb: 2, display: "flex", flexDirection: "column",gap: 1,
+      <Box sx={{ flexGrow: 1, display: "flex", flexDirection: "column", p: 2, position: "relative" }}>
+        <Paper sx={{flexGrow: 1, p: 2, overflowY: "auto", mb: 2, display: "flex", flexDirection: "column",gap: 1, position: "relative"
           }}>
           {messages.map((msg, i) => (
             <Box key={i} sx={{ alignSelf: msg.user === "system" ? "center" : msg.user === username ? "flex-end"
@@ -93,13 +99,29 @@ export function Chat() {
               </Typography>
             </Box>
           ))}
+          <TypingIndicator isTyping={isTyping} typingUser={username!}/>
         </Paper>
 
         {/* Campo de envio */}
         <Box sx={{ display: "flex", gap: 1 }}>
           <TextField fullWidth placeholder="Digite uma mensagem..." value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}/>
+            onChange={(e) => {
+              setInput(e.target.value)
+              sendStartTyping(username!, roomname!)
+
+              if (typingTimeoutRef.current){
+                clearTimeout(typingTimeoutRef.current);
+              }
+
+              typingTimeoutRef.current = setTimeout(() => {
+                sendStopTyping(username!, roomname!)
+              }, 600);
+            }
+          }
+            onKeyDown={(e) => 
+            {
+              e.key === "Enter" && handleSend()
+            }}/>
 
           <Button variant="contained" onClick={handleSend}>
             Enviar</Button>
