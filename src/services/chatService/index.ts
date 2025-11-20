@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import * as signalR from "@microsoft/signalr";
 
 export interface Message {
@@ -9,9 +9,12 @@ export interface Message {
 
 export function useChatService() {
   const [connection, setConnection] = useState<signalR.HubConnection | null>(null);
+  const [ isTyping, setIsTyping ] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [connectedUsers, setConnectedUsers] = useState<string[]>([]);
   const [isConnected, setIsConnected] = useState(false);
+
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>| null>(null);
 
   // Inicializa a conexão
   useEffect(() => {
@@ -36,7 +39,6 @@ export function useChatService() {
 
   connection.start()
     .then(() => {
-      console.log("Connection established!");
       setIsConnected(true);
     })
     .catch((error) => console.error("Error starting connection:", error));
@@ -55,10 +57,20 @@ useEffect(() => {
   connection.on("ConnectedUser", (users: string[]) => {
     setConnectedUsers(users);
   });
+  
+  connection.on("UserTyping", (user: string) => {
+    setIsTyping(true);
+  });
+  
+  connection.on("UserStopTyping", (user: string) => {
+    setIsTyping(false);
+  });
 
   return () => {
     connection.off("ReceiveMessage");
     connection.off("ConnectedUser");
+    connection.off("UserTyping");
+    connection.off("UserStopTyping");
   };
 }, [connection]); 
 
@@ -71,7 +83,19 @@ useEffect(() => {
   // Entrar na sala
   const joinRoom = useCallback(async (Username: string, ChatRoom: string) => {
     if (connection) await connection.invoke("JoinRoom", { Username, ChatRoom });
-  }, [connection]); 
+  }, [connection]);
+
+  const sendStartTyping = useCallback(async (Username: string, ChatRoom: string) => {
+    if (connection) {
+      await connection.invoke("StartTyping", ChatRoom, Username);
+    }
+  }, [connection]);
+
+  const sendStopTyping = useCallback(async (Username: string, ChatRoom: string) => {
+    if (connection) {
+      await connection.invoke("StopTyping", ChatRoom, Username);
+    }
+  }, [connection]);
 
   // Sair
   const leaveChat = useCallback(async () => {
@@ -79,12 +103,19 @@ useEffect(() => {
     setIsConnected(false);
   }, [connection]);
 
+
+
   return {
     messages,
     connectedUsers,
     isConnected,
     sendMessage,
     joinRoom,
-    leaveChat
+    sendStartTyping,
+    sendStopTyping,
+    leaveChat,
+    isTyping,
+    typingTimeoutRef
+
   };
 }
